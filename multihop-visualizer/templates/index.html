@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>HotpotQA 多跳推理链</title>
+    <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            display: flex; flex-direction: column; align-items: center;
+            padding: 20px; position: relative; overflow-x: hidden;
+        }
+        body::before {
+            content: '';
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none; z-index: 0;
+        }
+        .main-container {
+            position: relative; z-index: 1;
+            width: 100%; max-width: 1400px;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            padding: 24px;
+            display: flex; flex-direction: column; gap: 20px;
+        }
+        h2 {
+            font-size: 28px; font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            letter-spacing: 1px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 12px; margin: 0;
+        }
+        .controls {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 16px;
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+        }
+        .controls input, .controls select {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 8px;
+            color: #fff; padding: 10px 14px; font-size: 14px;
+            outline: none; transition: all 0.3s ease;
+        }
+        .controls input::placeholder { color: rgba(255,255,255,0.6); }
+        .controls input:focus, .controls select:focus {
+            border-color: #64ffda;
+            box-shadow: 0 0 12px rgba(100, 255, 218, 0.3);
+        }
+        .controls select option { background: #1e3c4a; color: #fff; }
+        .controls button {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            color: #e0e0e0; padding: 10px 18px; font-size: 14px; font-weight: 500;
+            cursor: pointer; transition: all 0.25s ease;
+            text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
+        }
+        .controls button:hover {
+            background: rgba(100, 255, 218, 0.15);
+            border-color: #64ffda; color: #64ffda;
+            box-shadow: 0 0 20px rgba(100, 255, 218, 0.2);
+            transform: translateY(-1px);
+        }
+        .controls button:active { transform: translateY(0px); }
+        #answerBox {
+            font-size: 16px; color: #64ffda; font-weight: bold;
+            min-height: 24px; text-shadow: 0 0 8px rgba(100, 255, 218, 0.5);
+        }
+        #mynetwork {
+            width: 100%; height: 600px;
+            background: rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.5);
+            overflow: hidden;
+            position: relative;
+        }
+        .legend {
+            position: absolute; top: 12px; right: 12px;
+            background: rgba(20, 30, 40, 0.7);
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            padding: 12px 16px; border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 12px; color: #ddd;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .legend span {
+            display: inline-block; width: 12px; height: 12px;
+            margin-right: 6px; vertical-align: middle; border-radius: 3px;
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+        .legend b { color: #64ffda; display: block; margin-bottom: 6px; }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h2>🔍 HotpotQA 多跳推理链</h2>
+        <div class="controls">
+            <input id="searchInput" placeholder="输入关键词搜索问题/句子" size="30" />
+            <button onclick="doSearch()">搜索</button>
+            <select id="resultSelect" style="min-width: 300px;">
+                <option value="">-- 请搜索或选择示例问题 --</option>
+            </select>
+            <button onclick="showChain()">🔗 查看支持链</button>
+            <button onclick="showClusters()">📊 文档聚类</button>
+            <button onclick="clearGraph()">🗑️ 清空画布</button>
+        </div>
+        <div id="answerBox"></div>
+        <div id="mynetwork"></div>
+    </div>
+
+    <script>
+        if (typeof vis === 'undefined') {
+            alert('可视化库加载失败，请刷新页面或检查网络连接。');
+            throw new Error('vis-network not loaded');
+        }
+
+        let networkInstance = null;
+        const container = document.getElementById('mynetwork');
+
+        const baseNodeStyle = {
+            shape: 'box',
+            margin: 10,
+            font: { size: 13, face: 'Segoe UI, Microsoft YaHei', color: '#fff', strokeWidth: 2, strokeColor: 'rgba(0,0,0,0.7)' },
+            borderWidth: 2,
+            shadow: { enabled: true, color: 'rgba(0,0,0,0.5)', size: 6, x: 2, y: 2 }
+        };
+        const baseEdgeStyle = {
+            width: 2,
+            color: { color: '#64ffda', highlight: '#ffffff', opacity: 0.7 },
+            smooth: { type: 'continuous' },
+            arrows: { to: { enabled: true, scaleFactor: 0.8 } },
+            font: { size: 11, face: 'Segoe UI', color: '#fff', background: 'rgba(0,0,0,0.6)' }
+        };
+        const chainPhysics = {
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: { gravitationalConstant: -50, centralGravity: 0.01, springLength: 180, springConstant: 0.08, damping: 0.4 },
+            stabilization: { iterations: 200 }
+        };
+
+        async function api(url) {
+            const resp = await fetch(url);
+            return await resp.json();
+        }
+
+        async function loadExamples() {
+            try {
+                const examples = await api('/api/examples');
+                const sel = document.getElementById('resultSelect');
+                while (sel.options.length > 1) sel.remove(1);
+                examples.forEach(ex => {
+                    const opt = document.createElement('option');
+                    opt.value = ex.id;
+                    opt.text = `[示例] ${ex.text}`;
+                    sel.add(opt);
+                });
+            } catch (err) { console.error('加载示例失败:', err); }
+        }
+
+        async function doSearch() {
+            try {
+                const q = document.getElementById('searchInput').value.trim();
+                if (!q) { await loadExamples(); return; }
+                const results = await api('/api/search?q=' + encodeURIComponent(q));
+                const sel = document.getElementById('resultSelect');
+                while (sel.options.length > 1) sel.remove(1);
+                if (results.length === 0) {
+                    const opt = document.createElement('option');
+                    opt.text = '无匹配结果';
+                    sel.add(opt);
+                } else {
+                    results.forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.id;
+                        opt.text = `[${r.type}] ${r.text}`;
+                        sel.add(opt);
+                    });
+                    sel.value = results[0].id;
+                }
+            } catch (err) { console.error('搜索失败:', err); }
+        }
+
+        async function showChain() {
+            try {
+                if (typeof vis === 'undefined') throw new Error('vis 未定义');
+                const qid = document.getElementById('resultSelect').value;
+                if (!qid) { alert('请先搜索或选择一个示例问题'); return; }
+                const data = await api('/api/chain?id=' + encodeURIComponent(qid));
+                if (data.error) { alert(data.error); return; }
+
+                // 在答案框中同时显示问题与答案
+                const questionText = data.question || '';
+                const answerText = data.answer || '';
+                document.getElementById('answerBox').innerHTML =
+                    `❓ ${questionText}<br>✅ 答案：${answerText}`;
+
+                // 只保留句子节点，移除问题节点
+                const nodes = data.nodes
+                    .filter(n => n.group !== 'question')   // 去除问题节点
+                    .map(n => ({
+                        id: n.id,
+                        label: n.label,
+                        title: n.title || n.label,
+                        shape: 'box',
+                        color: {
+                            background: n.color || 'rgba(100, 255, 218, 0.8)',
+                            border: '#64ffda',
+                            highlight: { background: '#64ffda', border: '#ffffff' }
+                        },
+                        size: 20,
+                        font: { size: 13, color: '#fff' },
+                        borderWidth: 2
+                    }));
+
+                const edges = data.edges.map(e => ({
+                    from: e.from, to: e.to,
+                    label: e.label || '',
+                    arrows: 'to',
+                    width: 3,
+                    color: { color: '#64ffda', opacity: 0.8 },
+                    font: { size: 12, align: 'middle', background: 'rgba(0,0,0,0.6)', color: '#ffffff' }
+                }));
+
+                const options = {
+                    nodes: baseNodeStyle,
+                    edges: baseEdgeStyle,
+                    physics: chainPhysics,
+                    interaction: { hover: true, tooltipDelay: 200, zoomView: true, dragView: true }
+                };
+
+                if (networkInstance) networkInstance.destroy();
+                networkInstance = new vis.Network(container, { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) }, options);
+                removeLegend();
+            } catch (err) {
+                console.error('显示支持链失败:', err);
+                alert('加载支持链时发生错误，请查看控制台。');
+            }
+        }
+
+        async function showClusters() {
+            try {
+                if (typeof vis === 'undefined') throw new Error('vis 未定义');
+                const clusters = await api('/api/cluster');
+                if (!clusters || clusters.length === 0) { alert('暂无聚类数据'); return; }
+
+                const colors = [
+                    'rgba(100, 255, 218, 0.85)', 'rgba(255, 107, 107, 0.85)',
+                    'rgba(78, 205, 196, 0.85)', 'rgba(69, 183, 209, 0.85)',
+                    'rgba(150, 206, 180, 0.85)', 'rgba(255, 234, 167, 0.85)',
+                    'rgba(221, 160, 221, 0.85)', 'rgba(152, 216, 200, 0.85)',
+                    'rgba(247, 220, 111, 0.85)', 'rgba(133, 193, 233, 0.85)'
+                ];
+
+                const cellWidth = 160, cellHeight = 46, itemsPerRow = 4;
+                const startX = 30, startY = 30, rowSpacing = 70;
+
+                let nodesArr = [];
+                let currentY = startY;
+
+                clusters.forEach((cluster, ci) => {
+                    const color = colors[ci % colors.length];
+                    const docs = cluster.documents || [];
+                    if (docs.length === 0) return;
+
+                    for (let i = 0; i < docs.length; i++) {
+                        const doc = docs[i];
+                        const col = i % itemsPerRow;
+                        const x = startX + col * cellWidth + cellWidth / 2;
+                        const y = currentY + Math.floor(i / itemsPerRow) * cellHeight + cellHeight / 2;
+                        nodesArr.push({
+                            id: doc,
+                            label: doc.length > 15 ? doc.substring(0, 15) + '…' : doc,
+                            title: `${doc}\n引用量: ${cluster.cluster_id * 5 + 1} - ${(cluster.cluster_id + 1) * 5}`,
+                            color: { background: color, border: '#ffffff' },
+                            shape: 'box',
+                            x: x, y: y, fixed: true,
+                            font: { size: 10, color: '#ffffff' },
+                            widthConstraint: 140,
+                            borderWidth: 2
+                        });
+                    }
+                    const rows = Math.ceil(docs.length / itemsPerRow);
+                    currentY += rows * cellHeight + rowSpacing;
+                });
+
+                const nodes = new vis.DataSet(nodesArr);
+                const edges = new vis.DataSet([]);
+                const options = {
+                    nodes: { shape: 'box', borderWidth: 2 },
+                    edges: { smooth: false },
+                    physics: { enabled: false },
+                    interaction: { dragNodes: false, zoomView: true, dragView: true }
+                };
+
+                if (networkInstance) networkInstance.destroy();
+                networkInstance = new vis.Network(container, { nodes, edges }, options);
+                addClusterLegend(clusters, colors);
+            } catch (err) {
+                console.error('显示聚类失败:', err);
+                alert('加载文档聚类时发生错误，请查看控制台。');
+            }
+        }
+
+        function addClusterLegend(clusters, colors) {
+            removeLegend();
+            const legend = document.createElement('div');
+            legend.id = 'clusterLegend';
+            legend.className = 'legend';
+            let html = '<b>文档聚类 (引用量区间)</b><br>';
+            clusters.forEach((c, i) => {
+                const color = colors[i % colors.length].replace('0.85', '1');
+                html += `<span style="background:${color}"></span> ${c.cluster_id * 5 + 1} - ${(c.cluster_id + 1) * 5} 次<br>`;
+            });
+            legend.innerHTML = html;
+            container.appendChild(legend);
+        }
+
+        function removeLegend() {
+            const oldLegend = document.getElementById('clusterLegend');
+            if (oldLegend) oldLegend.remove();
+        }
+
+        function clearGraph() {
+            if (networkInstance) {
+                networkInstance.destroy();
+                networkInstance = null;
+            }
+            document.getElementById('answerBox').innerHTML = '';
+            removeLegend();
+        }
+
+        window.addEventListener('load', () => loadExamples());
+        window.addEventListener('resize', () => { if (networkInstance) networkInstance.redraw(); });
+    </script>
+</body>
+</html>
