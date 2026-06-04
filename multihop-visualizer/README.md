@@ -14,10 +14,9 @@
 
 | 层次     | 技术 / 工具                            |
 | -------- | -------------------------------------- |
-| 数据存储 | **Neo4j** 图数据库 (5.x)                |
+| 数据存储 | **Neo4j** 图数据库 (4.4)                |
 | 后端 API | Python **Flask** + **neo4j‑driver**     |
 | 前端     | HTML5 + JavaScript + **vis‑network**    |
-| 样式     | 玻璃拟态 (Glassmorphism) + 结构线背景   |
 | 数据格式 | HotpotQA JSON (由 `.parquet` 转换而来)   |
 
 ## 项目结构
