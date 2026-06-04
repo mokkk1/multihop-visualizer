@@ -40,7 +40,7 @@ hotpot-multihop/
 
 ### 2. 启动 Neo4j
 如果使用 **Docker**：
-```bash
+```
 docker run -d \
   -p 7474:7474 -p 7687:7687 \
   -e NEO4J_AUTH=neo4j/your_password \
@@ -49,7 +49,7 @@ docker run -d \
 或使用 Neo4j Desktop 创建本地数据库，确保 Bolt 端口 (`7687`) 可访问，并将监听地址设置为 `0.0.0.0`。
 
 ### 3. 安装 Python 依赖
-bash
+
 pip install -r requirements.txt
 
 
@@ -74,7 +74,7 @@ CREATE INDEX sentence_lookup FOR (s:Sentence) ON (s.doc_title, s.index);
 
 然后运行导入脚本：
 ```
-bash
+
 python load_data.py
 ```
 脚本采用批量事务（每 200 条提交），并自动创建节点与关系，预期 9 万问题数据约 20 分钟内完成导入。
@@ -86,7 +86,7 @@ driver = GraphDatabase.driver("bolt://192.168.x.x:7687", auth=("neo4j", "your_pa
 ```
 运行：
 ```
-bash
+
 python app.py
 ```
 服务默认监听 `http://localhost:5000`。
