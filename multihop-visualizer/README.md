@@ -66,15 +66,17 @@ neo4j>=5.0
 
 ### 5. 导入数据到 Neo4j
 在导入前，建议先进入 Neo4j Browser (`http://localhost:7474`) 创建索引：
+```
 CREATE INDEX question_id FOR (q:Question) ON (q.id);
 CREATE INDEX document_title FOR (d:Document) ON (d.title);
 CREATE INDEX sentence_lookup FOR (s:Sentence) ON (s.doc_title, s.index);
-
+```
 
 然后运行导入脚本：
+```
 bash
 python load_data.py
-
+```
 脚本采用批量事务（每 200 条提交），并自动创建节点与关系，预期 9 万问题数据约 20 分钟内完成导入。
 
 ### 6. 启动后端服务
@@ -83,7 +85,8 @@ python load_data.py
 driver = GraphDatabase.driver("bolt://192.168.x.x:7687", auth=("neo4j", "your_password"))
 ```
 运行：
-```bash
+```
+bash
 python app.py
 ```
 服务默认监听 `http://localhost:5000`。
